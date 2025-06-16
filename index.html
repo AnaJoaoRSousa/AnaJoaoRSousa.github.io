@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Knee Flexion Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; }
+    canvas { display: block; margin: auto; }
+  </style>
+</head>
+<body>
+  <h1>Knee Flexion Tracker</h1>
+  <canvas id="angleChart" width="600" height="300"></canvas>
+  <canvas id="kneeAnimation" width="400" height="400"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const ctx = document.getElementById('angleChart').getContext('2d');
+    const angleData = {
+      labels: [],
+      datasets: [{
+        label: 'Knee Flexion Angle (°)',
+        data: [],
+        borderColor: 'blue',
+        fill: false,
+        tension: 0.1
+      }]
+    };
+
+    const angleChart = new Chart(ctx, {
+      type: 'line',
+      data: angleData,
+      options: {
+        scales: {
+          x: { title: { display: true, text: 'Time (s)' }},
+          y: { title: { display: true, text: 'Angle (°)' }, min: 0, max: 180 }
+        }
+      }
+    });
+
+    const animCanvas = document.getElementById('kneeAnimation');
+    const animCtx = animCanvas.getContext('2d');
+    let currentAngle = 0;
+
+    function drawKnee(angle) {
+      animCtx.clearRect(0, 0, animCanvas.width, animCanvas.height);
+
+      const hipX = 200, hipY = 100;
+      const upperLegLength = 100;
+      const lowerLegLength = 100;
+
+      const kneeX = hipX;
+      const kneeY = hipY + upperLegLength;
+
+      animCtx.lineWidth = 8;
+      animCtx.strokeStyle = 'black';
+
+      animCtx.beginPath();
+      animCtx.moveTo(hipX, hipY);
+      animCtx.lineTo(kneeX, kneeY);
+      animCtx.stroke();
+
+      const radians = angle * Math.PI / 180;
+      const footX = kneeX + lowerLegLength * Math.sin(radians);
+      const footY = kneeY + lowerLegLength * Math.cos(radians);
+
+      animCtx.strokeStyle = 'red';
+      animCtx.beginPath();
+      animCtx.moveTo(kneeX, kneeY);
+      animCtx.lineTo(footX, footY);
+      animCtx.stroke();
+    }
+
+    // Change this IP to your Arduino's IP
+    const socket = new WebSocket('ws://192.168.1.123:81');
+
+    let startTime = Date.now();
+
+    socket.onmessage = function(event) {
+      const angle = parseFloat(event.data);
+      if (!isNaN(angle)) {
+        currentAngle = angle;
+        drawKnee(currentAngle);
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        angleData.labels.push(elapsed);
+        angleData.datasets[0].data.push(currentAngle);
+
+        if (angleData.labels.length > 100) {
+          angleData.labels.shift();
+          angleData.datasets[0].data.shift();
+        }
+
+        angleChart.update();
+      }
+    };
+
+    socket.onopen = () => console.log('Connected to Arduino WebSocket');
+    socket.onerror = e => console.error('WebSocket error:', e);
+    socket.onclose = () => console.warn('WebSocket closed');
+  </script>
+</body>
+</html>
